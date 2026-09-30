@@ -29,31 +29,39 @@ class ApiService {
   }
 
   // 2. Ambil Daftar Bank Sampah (Untuk Dropdown)
-  static Future<List<dynamic>> getBankSampahList() async {
-    try {
-      final response = await http.get(
-        Uri.parse('${ApiConstants.baseUrl}/v2/bank-sampahs'),
-        headers: await _getHeaders(),
-      );
-      if (response.statusCode == 200) {
+static Future<List<dynamic>> getBankSampahList() async {
+  try {
+    final url = Uri.parse('${ApiConstants.baseUrl}/v2/bank-sampahs');
+    print('>>> GET REQUEST TO: $url');
+    
+    final response = await http.get(
+      url,
+      headers: await _getHeaders(),
+    );
+
+    print('>>> STATUS CODE: ${response.statusCode}');
+    print('>>> RESPONSE BODY: ${response.body}');
+
+    if (response.statusCode == 200) {
       final resData = jsonDecode(response.body);
-      
+
       // Jika backend membungkus hasilnya dalam key 'data'
       if (resData is Map && resData.containsKey('data')) {
-        return resData['data'];
+        return resData['data'] as List<dynamic>;
       } 
       // Jika backend langsung mengembalikan Array List []
       else if (resData is List) {
         return resData;
       }
+    } else {
+      print('>>> GAGAL FETCH DATA! Status Code: ${response.statusCode}');
     }
     return [];
   } catch (e) {
-    print('Error getBankSampahList: $e');
+    print('>>> EXCEPTION / KONEKSI ERROR getBankSampahList: $e');
     return [];
   }
 }
-
   // 3. Simpan Tiket Setor Sampah
   static Future<bool> createTiketSampah(int beratGram, dynamic bankSampahId) async {
     try {
