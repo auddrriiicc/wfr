@@ -4,11 +4,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 
 class ApiService {
-  // Helper Header untuk Otentikasi
-  static const String baseUrl = 'http://10.0.2.2:8000/api';
+  static String get baseUrl => ApiConstants.baseUrl;
+
   static Future<Map<String, String>> _getHeaders() async {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String token = prefs.getString('token') ?? '';
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
@@ -70,17 +71,13 @@ static Future<List<dynamic>> getBankSampahList() async {
     String? token = prefs.getString('token'); // Ambil token simpanan saat login
 
     final response = await http.post(
-      Uri.parse('$baseUrl/v2/tiketsetorsampahs'),
-      headers: {
-        'Content-Type': 'application/json',
-        'Accept': 'application/json',
-        'Authorization': 'Bearer $token', // WAJIB untuk middleware auth:api
-      },
-      body: jsonEncode({
-        'bank_sampah_id': bankSampahId,
-        'berat': berat,
-      }),
-    );
+  Uri.parse('${ApiConstants.baseUrl}/v2/tiketsetorsampahs'),
+  headers: await _getHeaders(),
+  body: jsonEncode({
+    'bank_sampah_id': bankSampahId,
+    'berat': berat,
+  }),
+);
 
     print(">>> RESPONSE CODE: ${response.statusCode}");
     print(">>> RESPONSE BODY: ${response.body}");

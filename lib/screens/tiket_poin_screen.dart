@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/api_service.dart';
 
 class TiketPoinScreen extends StatefulWidget {
-  final int userPoin;
-  const TiketPoinScreen({super.key, this.userPoin = 0});
+  const TiketPoinScreen({super.key});
 
   @override
   State<TiketPoinScreen> createState() => _TiketPoinScreenState();
@@ -17,6 +16,7 @@ class _TiketPoinScreenState extends State<TiketPoinScreen> {
   dynamic _selectedBankSampahId;
   int _jumlahPoin = 0;
   int _jumlahVoucher = 0;
+  int _userPoin = 0;
   bool _isUpdating = false;
   bool _isLoading = true;
   bool _isSubmitting = false;
@@ -24,7 +24,31 @@ class _TiketPoinScreenState extends State<TiketPoinScreen> {
   @override
   void initState() {
     super.initState();
-    _fetchBankSampah();
+    _loadInitialData();
+  }
+
+  Future<void> _loadInitialData() async {
+    await Future.wait([
+      _fetchBankSampah(),
+      _fetchUserPoin(),
+    ]);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _fetchUserPoin() async {
+    final res = await ApiService.getProfile();
+
+    if (!mounted) return;
+
+    if (res['success'] == true && res['data'] is Map) {
+      final data = res['data'] as Map;
+      final poin = data['poin'];
+      setState(() {
+        _userPoin = poin is int ? poin : int.tryParse('$poin') ?? 0;
+      });
+    }
   }
 
   Future<void> _fetchBankSampah() async {
@@ -32,7 +56,6 @@ class _TiketPoinScreenState extends State<TiketPoinScreen> {
     if (mounted) {
       setState(() {
         _listBankSampah = list;
-        _isLoading = false;
       });
     }
   }
@@ -77,7 +100,7 @@ class _TiketPoinScreenState extends State<TiketPoinScreen> {
       return;
     }
 
-    if (_jumlahPoin > widget.userPoin) {
+    if (_jumlahPoin > _userPoin) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Poin Anda tidak mencukupi untuk penukaran ini!')),
       );
@@ -85,10 +108,16 @@ class _TiketPoinScreenState extends State<TiketPoinScreen> {
     }
 
     setState(() => _isSubmitting = true);
-    bool success = await ApiService.createTiketPoin(_jumlahPoin, _jumlahVoucher, _selectedBankSampahId);
+    final success = await ApiService.createTiketPoin(
+      _jumlahPoin,
+      _jumlahVoucher,
+      _selectedBankSampahId,
+    );
+
+    if (!mounted) return;
     setState(() => _isSubmitting = false);
 
-    if (success && mounted) {
+    if (success) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Tiket Tukar Poin berhasil dibuat!')),
       );
@@ -146,7 +175,7 @@ class _TiketPoinScreenState extends State<TiketPoinScreen> {
                           const Icon(Icons.info_outline, color: Colors.white),
                           const SizedBox(width: 8),
                           Text(
-                            'Poin Anda saat ini: ${widget.userPoin} poin',
+                            'Poin Anda saat ini: $_userPoin poin',
                             style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                           ),
                         ],
