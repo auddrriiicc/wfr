@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../services/api_service.dart';
-import '../../screens/tiket_sampah_screen.dart';
+import 'setor_page.dart'; // 
 import '../../screens/tiket_poin_screen.dart';
 
 class MainNavigationScreen extends StatefulWidget {
@@ -275,7 +275,7 @@ class TiketSampahTab extends StatelessWidget {
                 onPressed: () {
                   Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const TiketSampahScreen()),
+                    MaterialPageRoute(builder: (context) => const SetorPage()),
                   );
                 },
                 icon: const Icon(Icons.add, size: 16, color: Colors.white),
@@ -503,7 +503,7 @@ class RiwayatTab extends StatelessWidget {
                     onPressed: () {
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (context) => const TiketSampahScreen()),
+                        MaterialPageRoute(builder: (context) => const SetorPage()),
                       );
                     },
                     style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF135232)),
