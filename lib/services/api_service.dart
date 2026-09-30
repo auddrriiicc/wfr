@@ -5,6 +5,7 @@ import '../core/constants.dart';
 
 class ApiService {
   // Helper Header untuk Otentikasi
+  static const String baseUrl = 'http://10.0.2.2:8000/api';
   static Future<Map<String, String>> _getHeaders() async {
     SharedPreferences prefs = await SharedPreferences.getInstance();
     String token = prefs.getString('token') ?? '';
@@ -63,21 +64,33 @@ static Future<List<dynamic>> getBankSampahList() async {
   }
 }
   // 3. Simpan Tiket Setor Sampah
-  static Future<bool> createTiketSampah(int beratGram, dynamic bankSampahId) async {
-    try {
-      final response = await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/v2/tiketsetorsampahs'),
-        headers: await _getHeaders(),
-        body: jsonEncode({
-          'berat_estimasi': beratGram,
-          'bank_sampah_id': bankSampahId,
-        }),
-      );
-      return response.statusCode == 200 || response.statusCode == 201;
-    } catch (e) {
-      return false;
-    }
+  static Future<bool> createTiketSampah(double berat, dynamic bankSampahId) async {
+  try {
+    SharedPreferences prefs = await SharedPreferences.getInstance();
+    String? token = prefs.getString('token'); // Ambil token simpanan saat login
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/v2/tiketsetorsampahs'),
+      headers: {
+        'Content-Type': 'application/json',
+        'Accept': 'application/json',
+        'Authorization': 'Bearer $token', // WAJIB untuk middleware auth:api
+      },
+      body: jsonEncode({
+        'bank_sampah_id': bankSampahId,
+        'berat': berat,
+      }),
+    );
+
+    print(">>> RESPONSE CODE: ${response.statusCode}");
+    print(">>> RESPONSE BODY: ${response.body}");
+
+    return response.statusCode == 201 || response.statusCode == 200;
+  } catch (e) {
+    print(">>> ERROR CREATE TIKET: $e");
+    return false;
   }
+}
 
   // 4. Simpan Tiket Tukar Poin
   static Future<bool> createTiketPoin(int jumlahPoin, int jumlahVoucher, dynamic bankSampahId) async {

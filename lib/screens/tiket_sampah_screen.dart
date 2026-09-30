@@ -13,7 +13,7 @@ class _TiketSampahScreenState extends State<TiketSampahScreen> {
 
   List<dynamic> _listBankSampah = [];
   dynamic _selectedBankSampahId;
-  int _beratEstimasi = 0;
+  double _beratEstimasi = 0.0;
   int _poinEstimasi = 0;
   bool _isLoading = true;
   bool _isSubmitting = false;
@@ -36,8 +36,9 @@ class _TiketSampahScreenState extends State<TiketSampahScreen> {
 
   void _onBeratChanged(String value) {
     setState(() {
-      _beratEstimasi = int.tryParse(value) ?? 0;
-      _poinEstimasi = _beratEstimasi; // Estimasi 1 gram = 1 poin
+      // Menggunakan double.tryParse agar mendukung angka desimal (misal 1.5)
+      _beratEstimasi = double.tryParse(value) ?? 0.0;
+      _poinEstimasi = (_beratEstimasi * 1000).toInt(); // Estimasi 1 Kg = 1000 poin
     });
   }
 
@@ -50,17 +51,22 @@ class _TiketSampahScreenState extends State<TiketSampahScreen> {
     }
 
     setState(() => _isSubmitting = true);
+    
+    // Mengirim berat dan ID bank sampah ke API
     bool success = await ApiService.createTiketSampah(_beratEstimasi, _selectedBankSampahId);
-    setState(() => _isSubmitting = false);
+    
+    if (mounted) {
+      setState(() => _isSubmitting = false);
+    }
 
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Tiket Setor Sampah berhasil dibuat!')),
       );
-      Navigator.pop(context, true); // Mengirim flag true untuk merefresh data
+      Navigator.pop(context, true); // Kembali ke halaman sebelumnya dan refresh
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Gagal membuat tiket setor sampah!')),
+        const SnackBar(content: Text('Gagal membuat tiket setor sampah! Check log console.')),
       );
     }
   }
@@ -99,14 +105,14 @@ class _TiketSampahScreenState extends State<TiketSampahScreen> {
                     const SizedBox(height: 20),
 
                     // Field Berat
-                    const Text('Berat Estimasi (gram)', style: TextStyle(fontWeight: FontWeight.bold)),
+                    const Text('Berat Estimasi (Kg)', style: TextStyle(fontWeight: FontWeight.bold)),
                     const SizedBox(height: 8),
                     TextField(
                       controller: _beratController,
-                      keyboardType: TextInputType.number,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       onChanged: _onBeratChanged,
                       decoration: InputDecoration(
-                        hintText: 'Masukkan berat sampah dalam gram',
+                        hintText: 'Masukkan berat sampah dalam Kg (contoh: 2.5)',
                         filled: true,
                         fillColor: Colors.white,
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -115,7 +121,7 @@ class _TiketSampahScreenState extends State<TiketSampahScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      'Estimasi akan menjadi berat aktual, dapat diubah oleh petugas bank sampah',
+                      'Estimasi berat akan diproses oleh petugas bank sampah',
                       style: TextStyle(color: Colors.grey[600], fontSize: 11),
                     ),
                     const SizedBox(height: 16),
@@ -157,7 +163,7 @@ class _TiketSampahScreenState extends State<TiketSampahScreen> {
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
                               const Text('Berat Sampah:'),
-                              Text('$_beratEstimasi gram', style: const TextStyle(fontWeight: FontWeight.bold)),
+                              Text('$_beratEstimasi Kg', style: const TextStyle(fontWeight: FontWeight.bold)),
                             ],
                           ),
                           const SizedBox(height: 8),
