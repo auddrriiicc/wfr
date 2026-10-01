@@ -35,12 +35,16 @@ class _TiketSampahScreenState extends State<TiketSampahScreen> {
   }
 
   void _onBeratChanged(String value) {
-    setState(() {
-      // Menggunakan double.tryParse agar mendukung angka desimal (misal 1.5)
-      _beratEstimasi = double.tryParse(value) ?? 0.0;
-      _poinEstimasi = (_beratEstimasi * 1000).toInt(); // Estimasi 1 Kg = 1000 poin
-    });
-  }
+  setState(() {
+    _beratEstimasi = double.tryParse(value) ?? 0.0;
+
+    // 1 Kg = 100 poin
+    const int poinPerKg = 100;
+
+    _poinEstimasi =
+        (_beratEstimasi * poinPerKg).round();
+  });
+}
 
   Future<void> _submitTiket() async {
     if (_beratEstimasi <= 0 || _selectedBankSampahId == null) {

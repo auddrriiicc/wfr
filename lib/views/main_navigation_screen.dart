@@ -16,12 +16,24 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
   final Color primaryGreen = const Color(0xFF135232);
   final Color bgLightGreen = const Color(0xFFE8F0EC);
 
-  final List<Widget> _pages = [
-    const BerandaTab(),
-    const TiketSampahTab(),
-    const TiketPoinTab(),
+  final GlobalKey<_BerandaTabState> _berandaKey =
+      GlobalKey<_BerandaTabState>();
+
+  final GlobalKey<_TiketSampahTabState> _tiketSampahKey =
+      GlobalKey<_TiketSampahTabState>();
+
+  final GlobalKey<_TiketPoinTabState> _tiketPoinKey =
+      GlobalKey<_TiketPoinTabState>();
+
+  final GlobalKey<_RiwayatTabState> _riwayatKey =
+      GlobalKey<_RiwayatTabState>();
+
+  late final List<Widget> _pages = [
+    BerandaTab(key: _berandaKey),
+    TiketSampahTab(key: _tiketSampahKey),
+    TiketPoinTab(key: _tiketPoinKey),
     const EdukasiTab(),
-    const RiwayatTab(),
+    RiwayatTab(key: _riwayatKey),
   ];
 
   @override
@@ -46,14 +58,29 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
         ),
         child: BottomNavigationBar(
           currentIndex: _currentIndex,
-          onTap: (index) => setState(() => _currentIndex = index),
+          onTap: (index) async {
+            setState(() {
+              _currentIndex = index;
+            });
+
+            if (index == 0) {
+              await _berandaKey.currentState?.refresh();
+            } else if (index == 1) {
+              await _tiketSampahKey.currentState?.refresh();
+            } else if (index == 2) {
+              await _tiketPoinKey.currentState?.refresh();
+            } else if (index == 4) {
+              await _riwayatKey.currentState?.refresh();
+            }
+          },
           type: BottomNavigationBarType.fixed,
           backgroundColor: Colors.white,
           selectedItemColor: primaryGreen,
           unselectedItemColor: Colors.grey[500],
           selectedFontSize: 11,
           unselectedFontSize: 11,
-          selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold),
+          selectedLabelStyle:
+              const TextStyle(fontWeight: FontWeight.bold),
           items: const [
             BottomNavigationBarItem(
               icon: Icon(Icons.home_outlined),
@@ -90,6 +117,7 @@ class _MainNavigationScreenState extends State<MainNavigationScreen> {
 // ============================================================================
 // 1. TAB BERANDA
 // ============================================================================
+
 class BerandaTab extends StatefulWidget {
   const BerandaTab({super.key});
 
@@ -99,120 +127,282 @@ class BerandaTab extends StatefulWidget {
 
 class _BerandaTabState extends State<BerandaTab> {
   Map<String, dynamic>? _user;
+
+  double _totalGramasi = 0;
+  int _setorSelesai = 0;
+
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _loadData();
+    refresh();
   }
 
-  Future<void> _loadData() async {
+  Future<void> refresh() async {
     try {
-      final res = await ApiService.getProfile();
+      final results = await Future.wait([
+        ApiService.getProfile(),
+        ApiService.getRiwayatSetor(),
+      ]);
+
+      final profile =
+          results[0] as Map<String, dynamic>;
+
+      final tiketSetor =
+          results[1] as List<dynamic>;
+
+      double totalGramasi = 0;
+      int setorSelesai = 0;
+
+      for (final item in tiketSetor) {
+        final berat =
+            double.tryParse(
+              '${item['berat'] ?? 0}',
+            ) ??
+            0;
+
+        totalGramasi += berat;
+
+        final status =
+            '${item['status'] ?? ''}'.toLowerCase();
+
+        if (status == 'selesai') {
+          setorSelesai++;
+        }
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _user = profile['data'] is Map
+            ? Map<String, dynamic>.from(
+                profile['data'] as Map,
+              )
+            : {};
+
+        _totalGramasi = totalGramasi;
+        _setorSelesai = setorSelesai;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('ERROR BERANDA: $e');
+
       if (mounted) {
         setState(() {
-          _user = res['data'];
           _isLoading = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  int get _userPoin {
+    return int.tryParse(
+          '${_user?['poin'] ?? 0}',
+        ) ??
+        0;
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_isLoading) return const Center(child: CircularProgressIndicator());
+    if (_isLoading) {
+      return const Center(
+        child: CircularProgressIndicator(),
+      );
+    }
+
+    const int poinPerVoucher = 100;
+
+    final int progresPoin =
+        _userPoin % poinPerVoucher;
+
+    final int sisaPoin = progresPoin == 0
+        ? poinPerVoucher
+        : poinPerVoucher - progresPoin;
+
+    final double progress =
+        progresPoin / poinPerVoucher;
 
     return RefreshIndicator(
-      onRefresh: _loadData,
+      onRefresh: refresh,
       child: SingleChildScrollView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
         padding: const EdgeInsets.all(20.0),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment:
+              CrossAxisAlignment.start,
           children: [
             Row(
               children: [
                 CircleAvatar(
-                  backgroundColor: const Color(0xFF135232),
+                  backgroundColor:
+                      const Color(0xFF135232),
                   child: Text(
-                    (_user?['nama'] ?? 'M')[0].toUpperCase(),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                    (_user?['nama_lengkap'] ?? 'M')
+                            .toString()
+                            .trim()
+                            .isNotEmpty
+                        ? (_user?['nama_lengkap'] ?? 'M')
+                            .toString()
+                            .trim()[0]
+                            .toUpperCase()
+                        : 'M',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment:
+                      CrossAxisAlignment.start,
                   children: [
                     Text(
-                      _user?['nama'] ?? 'Masyarakat',
-                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      _user?['nama_lengkap'] ??
+                          'Masyarakat',
+                      style:
+                          const TextStyle(
+                        fontWeight:
+                            FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
-                    Text('${_user?['poin'] ?? 0} poin', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                    Text(
+                      '$_userPoin poin',
+                      style: TextStyle(
+                        color:
+                            Colors.grey[600],
+                        fontSize: 12,
+                      ),
+                    ),
                   ],
                 ),
               ],
             ),
             const SizedBox(height: 24),
-            const Text('Beranda', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            Text('Selamat datang kembali', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+            const Text(
+              'Beranda',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              'Selamat datang kembali',
+              style: TextStyle(
+                color: Colors.grey[600],
+                fontSize: 13,
+              ),
+            ),
             const SizedBox(height: 20),
-
             Row(
               children: [
                 Expanded(
-                  child: _buildStatCard('Total Poin', '${_user?['poin'] ?? 0}', 'Poin terakumulasi', Icons.show_chart),
+                  child: _buildStatCard(
+                    'Total Poin',
+                    '$_userPoin',
+                    'Poin terakumulasi',
+                    Icons.show_chart,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _buildStatCard('Total Gramasi', '${_user?['total_gramasi'] ?? 0}', 'gram', Icons.delete_outline),
+                  child: _buildStatCard(
+                    'Total Gramasi',
+                    _totalGramasi
+                        .toStringAsFixed(2),
+                    'kg',
+                    Icons.delete_outline,
+                  ),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
-                  child: _buildStatCard('Setor Selesai', '${_user?['setor_selesai'] ?? 0}', 'transaksi', Icons.check_circle_outline),
+                  child: _buildStatCard(
+                    'Setor Selesai',
+                    '$_setorSelesai',
+                    'transaksi',
+                    Icons.check_circle_outline,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 20),
-
             Container(
-              padding: const EdgeInsets.all(20),
+              width: double.infinity,
+              padding:
+                  const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: const Color(0xFF135232),
-                borderRadius: BorderRadius.circular(16),
+                borderRadius:
+                    BorderRadius.circular(16),
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   const Row(
                     children: [
-                      Icon(Icons.card_giftcard, color: Colors.white),
+                      Icon(
+                        Icons.card_giftcard,
+                        color: Colors.white,
+                      ),
                       SizedBox(width: 8),
-                      Text('Progress Voucher', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      Text(
+                        'Progress Voucher',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight:
+                              FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
                     ],
                   ),
                   const SizedBox(height: 8),
-                  const Text('Poin menuju voucher berikutnya', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  const Text(
+                    'Poin menuju voucher berikutnya',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('${_user?['poin'] ?? 0} / 500', style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    ],
+                  Text(
+                    '$progresPoin / $poinPerVoucher',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: LinearProgressIndicator(
-                      value: ((_user?['poin'] ?? 0) / 500).clamp(0.0, 1.0),
-                      backgroundColor: Colors.white24,
-                      color: Colors.greenAccent,
+                    borderRadius:
+                        BorderRadius.circular(10),
+                    child:
+                        LinearProgressIndicator(
+                      value: progress
+                          .clamp(0.0, 1.0),
+                      backgroundColor:
+                          Colors.white24,
+                      color:
+                          Colors.greenAccent,
                       minHeight: 8,
                     ),
                   ),
                   const SizedBox(height: 12),
-                  const Text('0% tercapai • 500 poin lagi', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                  Text(
+                    '${(progress * 100).round()}% tercapai • '
+                    '$sisaPoin poin lagi',
+                    style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -222,26 +412,59 @@ class _BerandaTabState extends State<BerandaTab> {
     );
   }
 
-  Widget _buildStatCard(String title, String value, String unit, IconData icon) {
+  Widget _buildStatCard(
+    String title,
+    String value,
+    String unit,
+    IconData icon,
+  ) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: const Color(0xFFE8F0EC),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius:
+            BorderRadius.circular(12),
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment:
+                MainAxisAlignment.spaceBetween,
             children: [
-              Text(title, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.black87)),
-              Icon(icon, size: 16, color: Colors.grey[700]),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight:
+                      FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+              Icon(
+                icon,
+                size: 16,
+                color: Colors.grey[700],
+              ),
             ],
           ),
           const SizedBox(height: 12),
-          Text(value, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF135232))),
-          Text(unit, style: TextStyle(fontSize: 10, color: Colors.grey[600])),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF135232),
+            ),
+          ),
+          Text(
+            unit,
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.grey[600],
+            ),
+          ),
         ],
       ),
     );
@@ -251,77 +474,331 @@ class _BerandaTabState extends State<BerandaTab> {
 // ============================================================================
 // 2. TAB TIKET SAMPAH
 // ============================================================================
-class TiketSampahTab extends StatelessWidget {
+
+class TiketSampahTab extends StatefulWidget {
   const TiketSampahTab({super.key});
 
   @override
+  State<TiketSampahTab> createState() =>
+      _TiketSampahTabState();
+}
+
+class _TiketSampahTabState
+    extends State<TiketSampahTab> {
+  List<dynamic> _data = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    refresh();
+  }
+
+  Future<void> refresh() async {
+    await _loadData();
+  }
+
+  Future<void> _loadData() async {
+    try {
+      final data =
+          await ApiService.getRiwayatSetor();
+
+      if (!mounted) return;
+
+      setState(() {
+        _data = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint(
+        'ERROR TIKET SAMPAH: $e',
+      );
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final totalTiket = _data.length;
+
+    final totalBerat =
+        _data.fold<double>(
+      0,
+      (sum, item) {
+        final berat =
+            double.tryParse(
+              '${item['berat'] ?? 0}',
+            ) ??
+            0;
+
+        return sum + berat;
+      },
+    );
+
+    final totalMenunggu =
+        _data.where((item) {
+      final status =
+          '${item['status'] ?? ''}'
+              .toLowerCase();
+
+      return status == 'pending' ||
+          status == 'menunggu';
+    }).length;
+
+    final totalSelesai =
+        _data.where((item) {
+      final status =
+          '${item['status'] ?? ''}'
+              .toLowerCase();
+
+      return status == 'selesai';
+    }).length;
+
     return Padding(
       padding: const EdgeInsets.all(20.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment:
+                MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
-                  Text('Tiket Setor Sampah', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                  Text('0 tiket tercatat', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  const Text(
+                    'Tiket Setor Sampah',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '$totalTiket tiket tercatat',
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
               ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
+                onPressed: () async {
+                  final result =
+                      await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const TiketSampahScreen()),
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          const TiketSampahScreen(),
+                    ),
                   );
+
+                  if (result == true) {
+                    await refresh();
+                  }
                 },
-                icon: const Icon(Icons.add, size: 16, color: Colors.white),
-                label: const Text('Buat Tiket', style: TextStyle(color: Colors.white, fontSize: 12)),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF135232)),
+                icon: const Icon(
+                  Icons.add,
+                  size: 16,
+                  color: Colors.white,
+                ),
+                label: const Text(
+                  'Buat Tiket',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                  ),
+                ),
+                style:
+                    ElevatedButton.styleFrom(
+                  backgroundColor:
+                      const Color(0xFF135232),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 20),
           Row(
             children: [
-              Expanded(child: _buildInfoCard('Total Gramasi', '0', 'gram', Colors.blue)),
+              Expanded(
+                child: _buildInfoCard(
+                  'Total Berat',
+                  totalBerat
+                      .toStringAsFixed(2),
+                  'kg',
+                  Colors.blue,
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _buildInfoCard('Menunggu', '0', 'tiket', Colors.orange)),
+              Expanded(
+                child: _buildInfoCard(
+                  'Menunggu',
+                  '$totalMenunggu',
+                  'tiket',
+                  Colors.orange,
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _buildInfoCard('Selesai', '0', 'tiket', Colors.green)),
+              Expanded(
+                child: _buildInfoCard(
+                  'Selesai',
+                  '$totalSelesai',
+                  'tiket',
+                  Colors.green,
+                ),
+              ),
             ],
           ),
-          const Expanded(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.insert_drive_file_outlined, size: 64, color: Colors.grey),
-                  SizedBox(height: 12),
-                  Text('Belum ada tiket setor sampah', style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: _isLoading
+                ? const Center(
+                    child:
+                        CircularProgressIndicator(),
+                  )
+                : _data.isEmpty
+                    ? RefreshIndicator(
+                        onRefresh: refresh,
+                        child: ListView(
+                          physics:
+                              const AlwaysScrollableScrollPhysics(),
+                          children: const [
+                            SizedBox(
+                              height: 250,
+                              child: Center(
+                                child: Text(
+                                  'Belum ada tiket setor sampah',
+                                  style: TextStyle(
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: refresh,
+                        child: ListView.builder(
+                          physics:
+                              const AlwaysScrollableScrollPhysics(),
+                          itemCount: _data.length,
+                          itemBuilder:
+                              (context, index) {
+                            final item =
+                                _data[index];
+
+                            final bank =
+                                item['bank_sampah']
+                                    ?[
+                                      'nama_bank_sampah'
+                                    ] ??
+                                'Bank Sampah';
+
+                            final berat =
+                                item['berat'] ?? 0;
+
+                            final poin =
+                                item['estimasi_poin'] ??
+                                    0;
+
+                            final status =
+                                item['status'] ??
+                                    'pending';
+
+                            return Card(
+                              margin:
+                                  const EdgeInsets
+                                      .only(
+                                bottom: 10,
+                              ),
+                              child: ListTile(
+                                leading:
+                                    const CircleAvatar(
+                                  child: Icon(
+                                    Icons
+                                        .delete_outline,
+                                  ),
+                                ),
+                                title: Text(
+                                  item['kode_tiket'] ??
+                                      'Tiket Setor',
+                                ),
+                                subtitle: Text(
+                                  '$bank\n'
+                                  'Berat: $berat kg\n'
+                                  'Estimasi: $poin poin',
+                                ),
+                                isThreeLine: true,
+                                trailing: Text(
+                                  '$status',
+                                  style:
+                                      const TextStyle(
+                                    fontWeight:
+                                        FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInfoCard(String label, String value, String unit, Color color) {
+  Widget _buildInfoCard(
+    String label,
+    String value,
+    String unit,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFFE8F0EC), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F0EC),
+        borderRadius:
+            BorderRadius.circular(12),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: color,
+              fontWeight:
+                  FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
-          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-          Text(unit, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            unit,
+            style: const TextStyle(
+              fontSize: 10,
+              color: Colors.grey,
+            ),
+          ),
         ],
       ),
     );
@@ -331,77 +808,340 @@ class TiketSampahTab extends StatelessWidget {
 // ============================================================================
 // 3. TAB TIKET POIN
 // ============================================================================
-class TiketPoinTab extends StatelessWidget {
+
+class TiketPoinTab extends StatefulWidget {
   const TiketPoinTab({super.key});
 
   @override
+  State<TiketPoinTab> createState() =>
+      _TiketPoinTabState();
+}
+
+class _TiketPoinTabState
+    extends State<TiketPoinTab> {
+  int _userPoin = 0;
+  List<dynamic> _data = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    refresh();
+  }
+
+  Future<void> refresh() async {
+    try {
+      final results = await Future.wait([
+        ApiService.getProfile(),
+        ApiService.getRiwayatPoin(),
+      ]);
+
+      final profile =
+          results[0] as Map<String, dynamic>;
+
+      final data =
+          results[1] as List<dynamic>;
+
+      int poin = 0;
+
+      if (profile['data'] is Map) {
+        final profileData =
+            profile['data'] as Map;
+
+        poin = int.tryParse(
+              '${profileData['poin'] ?? 0}',
+            ) ??
+            0;
+      }
+
+      if (!mounted) return;
+
+      setState(() {
+        _userPoin = poin;
+        _data = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint(
+        'ERROR TIKET POIN: $e',
+      );
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final totalMenunggu =
+        _data.where((item) {
+      final status =
+          '${item['status'] ?? ''}'
+              .toLowerCase();
+
+      return status == 'pending' ||
+          status == 'menunggu';
+    }).length;
+
+    final totalSelesai =
+        _data.where((item) {
+      final status =
+          '${item['status'] ?? ''}'
+              .toLowerCase();
+
+      return status == 'selesai';
+    }).length;
+
     return Padding(
       padding: const EdgeInsets.all(20.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            mainAxisAlignment:
+                MainAxisAlignment.spaceBetween,
             children: [
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              Column(
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
-                  Text('Tukar Poin', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-                  Text('0 tiket tercatat', style: TextStyle(color: Colors.grey, fontSize: 12)),
+                  const Text(
+                    'Tukar Poin',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    '${_data.length} tiket tercatat',
+                    style: const TextStyle(
+                      color: Colors.grey,
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
               ElevatedButton.icon(
-                onPressed: () {
-                  Navigator.push(
+                onPressed: () async {
+                  final result =
+                      await Navigator.push(
                     context,
-                    MaterialPageRoute(builder: (context) => const TiketPoinScreen()),
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          const TiketPoinScreen(),
+                    ),
                   );
+
+                  if (result == true) {
+                    await refresh();
+                  }
                 },
-                icon: const Icon(Icons.add, size: 16, color: Colors.white),
-                label: const Text('Tukar Poin', style: TextStyle(color: Colors.white, fontSize: 12)),
-                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF135232)),
+                icon: const Icon(
+                  Icons.add,
+                  size: 16,
+                  color: Colors.white,
+                ),
+                label: const Text(
+                  'Tukar Poin',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                  ),
+                ),
+                style:
+                    ElevatedButton.styleFrom(
+                  backgroundColor:
+                      const Color(0xFF135232),
+                ),
               ),
             ],
           ),
           const SizedBox(height: 20),
           Row(
             children: [
-              Expanded(child: _buildInfoCard('Poin Saya', '0', 'poin', Colors.blue)),
+              Expanded(
+                child: _buildInfoCard(
+                  'Poin Saya',
+                  '$_userPoin',
+                  'poin',
+                  Colors.blue,
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _buildInfoCard('Menunggu', '0', 'tiket', Colors.orange)),
+              Expanded(
+                child: _buildInfoCard(
+                  'Menunggu',
+                  '$totalMenunggu',
+                  'tiket',
+                  Colors.orange,
+                ),
+              ),
               const SizedBox(width: 8),
-              Expanded(child: _buildInfoCard('Selesai', '0', 'tiket', Colors.green)),
+              Expanded(
+                child: _buildInfoCard(
+                  'Selesai',
+                  '$totalSelesai',
+                  'tiket',
+                  Colors.green,
+                ),
+              ),
             ],
           ),
-          const Expanded(
-            child: Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.confirmation_number_outlined, size: 64, color: Colors.grey),
-                  SizedBox(height: 12),
-                  Text('Belum ada tiket poin', style: TextStyle(color: Colors.grey)),
-                ],
-              ),
-            ),
+          const SizedBox(height: 20),
+          Expanded(
+            child: _isLoading
+                ? const Center(
+                    child:
+                        CircularProgressIndicator(),
+                  )
+                : _data.isEmpty
+                    ? RefreshIndicator(
+                        onRefresh: refresh,
+                        child: ListView(
+                          physics:
+                              const AlwaysScrollableScrollPhysics(),
+                          children: const [
+                            SizedBox(
+                              height: 250,
+                              child: Center(
+                                child: Column(
+                                  mainAxisAlignment:
+                                      MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons
+                                          .confirmation_number_outlined,
+                                      size: 64,
+                                      color:
+                                          Colors.grey,
+                                    ),
+                                    SizedBox(height: 12),
+                                    Text(
+                                      'Belum ada tiket poin',
+                                      style:
+                                          TextStyle(
+                                        color:
+                                            Colors.grey,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: refresh,
+                        child: ListView.builder(
+                          physics:
+                              const AlwaysScrollableScrollPhysics(),
+                          itemCount: _data.length,
+                          itemBuilder:
+                              (context, index) {
+                            final item =
+                                _data[index];
+
+                            final status =
+                                item['status'] ??
+                                    'pending';
+
+                            final jumlahPoin =
+                                item['jumlah_poin'] ??
+                                    item['poin'] ??
+                                    0;
+
+                            final jumlahVoucher =
+                                item['jumlah_voucher'] ??
+                                    item['voucher'] ??
+                                    0;
+
+                            return Card(
+                              margin:
+                                  const EdgeInsets
+                                      .only(
+                                bottom: 10,
+                              ),
+                              child: ListTile(
+                                leading:
+                                    const CircleAvatar(
+                                  child: Icon(
+                                    Icons
+                                        .card_giftcard,
+                                  ),
+                                ),
+                                title: Text(
+                                  'Tukar $jumlahVoucher voucher',
+                                ),
+                                subtitle: Text(
+                                  'Poin: $jumlahPoin',
+                                ),
+                                trailing: Text(
+                                  '$status',
+                                  style:
+                                      const TextStyle(
+                                    fontWeight:
+                                        FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildInfoCard(String label, String value, String unit, Color color) {
+  Widget _buildInfoCard(
+    String label,
+    String value,
+    String unit,
+    Color color,
+  ) {
     return Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFFE8F0EC), borderRadius: BorderRadius.circular(12)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE8F0EC),
+        borderRadius:
+            BorderRadius.circular(12),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(fontSize: 11, color: color, fontWeight: FontWeight.w600)),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: color,
+              fontWeight:
+                  FontWeight.w600,
+            ),
+          ),
           const SizedBox(height: 8),
-          Text(value, style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: color)),
-          Text(unit, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            unit,
+            style: const TextStyle(
+              fontSize: 10,
+              color: Colors.grey,
+            ),
+          ),
         ],
       ),
     );
@@ -411,6 +1151,7 @@ class TiketPoinTab extends StatelessWidget {
 // ============================================================================
 // 4. TAB EDUKASI
 // ============================================================================
+
 class EdukasiTab extends StatelessWidget {
   const EdukasiTab({super.key});
 
@@ -419,44 +1160,83 @@ class EdukasiTab extends StatelessWidget {
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
-          const Text('Daftar Artikel Edukasi', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          Text('Dapatkan edukasi terkait Bank Sampah', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+          const Text(
+            'Daftar Artikel Edukasi',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            'Dapatkan edukasi terkait Bank Sampah',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 13,
+            ),
+          ),
           const SizedBox(height: 20),
-
           Card(
             elevation: 0,
             color: Colors.white,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            shape: RoundedRectangleBorder(
+              borderRadius:
+                  BorderRadius.circular(16),
+            ),
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding:
+                  const EdgeInsets.all(16.0),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment:
+                    CrossAxisAlignment.start,
                 children: [
                   Container(
                     height: 160,
                     width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFE8F0EC),
-                      borderRadius: BorderRadius.circular(12),
+                    decoration:
+                        BoxDecoration(
+                      color:
+                          const Color(0xFFE8F0EC),
+                      borderRadius:
+                          BorderRadius.circular(
+                        12,
+                      ),
                     ),
                     child: const Center(
-                      child: Icon(Icons.image, size: 48, color: Colors.grey),
+                      child: Icon(
+                        Icons.image,
+                        size: 48,
+                        color: Colors.grey,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   const Text(
                     'Bank Sampah Sekanak 1.0 Already Up',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight:
+                          FontWeight.bold,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed sed erat scelerisque...',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 13,
+                    ),
                   ),
                   const SizedBox(height: 12),
-                  const Text('12 September 2026', style: TextStyle(color: Colors.grey, fontSize: 11)),
+                  const Text(
+                    '12 September 2026',
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontSize: 11,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -470,47 +1250,207 @@ class EdukasiTab extends StatelessWidget {
 // ============================================================================
 // 5. TAB RIWAYAT
 // ============================================================================
-class RiwayatTab extends StatelessWidget {
+
+class RiwayatTab extends StatefulWidget {
   const RiwayatTab({super.key});
+
+  @override
+  State<RiwayatTab> createState() =>
+      _RiwayatTabState();
+}
+
+class _RiwayatTabState
+    extends State<RiwayatTab> {
+  List<dynamic> _data = [];
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    refresh();
+  }
+
+  Future<void> refresh() async {
+    try {
+      final data =
+          await ApiService.getRiwayatSetor();
+
+      if (!mounted) return;
+
+      setState(() {
+        _data = data;
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint(
+        'ERROR RIWAYAT: $e',
+      );
+
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.all(20.0),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            CrossAxisAlignment.start,
         children: [
-          const Text('Riwayat Transaksi', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          Text('Riwayat setor sampah dan tukar poin selesai', style: TextStyle(color: Colors.grey[600], fontSize: 13)),
+          const Text(
+            'Riwayat Transaksi',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          Text(
+            'Riwayat setor sampah dan tukar poin',
+            style: TextStyle(
+              color: Colors.grey[600],
+              fontSize: 13,
+            ),
+          ),
           const SizedBox(height: 20),
-
           Expanded(
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE8F0EC),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  const Icon(Icons.receipt_long_outlined, size: 64, color: Colors.grey),
-                  const SizedBox(height: 12),
-                  const Text('Belum ada riwayat transaksi selesai', style: TextStyle(color: Colors.grey)),
-                  const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (context) => const TiketSampahScreen()),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF135232)),
-                    child: const Text('Setor Sampah Sekarang', style: TextStyle(color: Colors.white)),
+            child: _isLoading
+                ? const Center(
+                    child:
+                        CircularProgressIndicator(),
+                  )
+                : _data.isEmpty
+                    ? _buildEmpty(context)
+                    : RefreshIndicator(
+                        onRefresh: refresh,
+                        child: ListView.builder(
+                          physics:
+                              const AlwaysScrollableScrollPhysics(),
+                          itemCount: _data.length,
+                          itemBuilder:
+                              (context, index) {
+                            final item =
+                                _data[index];
+
+                            final bank =
+                                item['bank_sampah']
+                                    ?[
+                                      'nama_bank_sampah'
+                                    ] ??
+                                'Bank Sampah';
+
+                            final berat =
+                                item['berat'] ?? 0;
+
+                            final poin =
+                                item['estimasi_poin'] ??
+                                    0;
+
+                            final status =
+                                item['status'] ??
+                                    'pending';
+
+                            return Card(
+                              margin:
+                                  const EdgeInsets
+                                      .only(
+                                bottom: 10,
+                              ),
+                              child: ListTile(
+                                leading:
+                                    const CircleAvatar(
+                                  child: Icon(
+                                    Icons
+                                        .delete_outline,
+                                  ),
+                                ),
+                                title: Text(
+                                  item['kode_tiket'] ??
+                                      'Tiket Setor',
+                                ),
+                                subtitle: Text(
+                                  '$bank\n'
+                                  'Berat: $berat kg\n'
+                                  'Poin: $poin',
+                                ),
+                                isThreeLine: true,
+                                trailing: Text(
+                                  '$status',
+                                  style:
+                                      const TextStyle(
+                                    fontWeight:
+                                        FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEmpty(BuildContext context) {
+    return RefreshIndicator(
+      onRefresh: refresh,
+      child: ListView(
+        physics:
+            const AlwaysScrollableScrollPhysics(),
+        children: [
+          SizedBox(
+            height: 300,
+            child: Column(
+              mainAxisAlignment:
+                  MainAxisAlignment.center,
+              children: [
+                const Icon(
+                  Icons.receipt_long_outlined,
+                  size: 64,
+                  color: Colors.grey,
+                ),
+                const SizedBox(height: 12),
+                const Text(
+                  'Belum ada riwayat transaksi',
+                  style: TextStyle(
+                    color: Colors.grey,
                   ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton(
+                  onPressed: () async {
+                    final result =
+                        await Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) =>
+                            const TiketSampahScreen(),
+                      ),
+                    );
+
+                    if (result == true) {
+                      await refresh();
+                    }
+                  },
+                  style:
+                      ElevatedButton.styleFrom(
+                    backgroundColor:
+                        const Color(0xFF135232),
+                  ),
+                  child: const Text(
+                    'Setor Sampah Sekarang',
+                    style: TextStyle(
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
         ],

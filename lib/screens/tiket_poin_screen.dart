@@ -65,7 +65,7 @@ class _TiketPoinScreenState extends State<TiketPoinScreen> {
     _isUpdating = true;
 
     int poin = int.tryParse(value) ?? 0;
-    int voucher = poin ~/ 500; // 1 voucher = 500 poin
+    int voucher = poin ~/ 100; // 1 voucher = 500 poin
 
     setState(() {
       _jumlahPoin = poin;
@@ -77,20 +77,29 @@ class _TiketPoinScreenState extends State<TiketPoinScreen> {
   }
 
   void _onVoucherChanged(String value) {
-    if (_isUpdating) return;
-    _isUpdating = true;
+  if (_isUpdating) return;
 
-    int voucher = int.tryParse(value) ?? 0;
-    int poin = voucher * 500;
+  _isUpdating = true;
 
-    setState(() {
-      _jumlahVoucher = voucher;
-      _jumlahPoin = poin;
-      _poinController.text = poin > 0 ? poin.toString() : '';
-    });
+  final int voucher =
+      int.tryParse(value) ?? 0;
 
-    _isUpdating = false;
-  }
+  // 1 voucher = 100 poin
+  const int poinPerVoucher = 100;
+
+  final int poin =
+      voucher * poinPerVoucher;
+
+  setState(() {
+    _jumlahVoucher = voucher;
+    _jumlahPoin = poin;
+
+    _poinController.text =
+        poin > 0 ? poin.toString() : '';
+  });
+
+  _isUpdating = false;
+}
 
   Future<void> _submitTukarPoin() async {
     if (_jumlahPoin <= 0 || _selectedBankSampahId == null) {
@@ -232,7 +241,7 @@ class _TiketPoinScreenState extends State<TiketPoinScreen> {
                       ),
                     ),
                     const SizedBox(height: 4),
-                    Text('1 voucher = 500 poin', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+                    Text('1 voucher = 100 poin', style: TextStyle(color: Colors.grey[600], fontSize: 11)),
                     const SizedBox(height: 16),
 
                     // Pilih Bank Sampah
