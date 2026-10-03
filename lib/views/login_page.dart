@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'main_navigation_screen.dart';
 import 'register_page.dart';
+import '../screens/admin_dashboard_screen.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -47,12 +48,25 @@ class _LoginPageState extends State<LoginPage> {
 
     if (!mounted) return;
 
-    if (result['success']) {
-      // DIUBAH DI SINI: Pindah ke MainNavigationScreen
-      Navigator.pushReplacement(
-        context,
-        MaterialPageRoute(builder: (context) => const MainNavigationScreen()),
-      );
+    if (result['success'] == true) {
+      final role = result['role']?.toString().trim();
+      debugPrint('LOGIN ROLE: $role');
+
+      if (role == 'Admin Bank Sampah') {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const AdminDashboardScreen(),
+          ),
+        );
+      } else {
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (context) => const MainNavigationScreen(),
+          ),
+        );
+      }
     } else {
       // Jika gagal, tampilkan pesan error dari backend
       ScaffoldMessenger.of(context).showSnackBar(

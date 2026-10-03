@@ -1,6 +1,8 @@
 import 'dart:convert';
+
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+
 import '../core/constants.dart';
 
 class ApiService {
@@ -13,87 +15,97 @@ class ApiService {
     return {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
-      'Authorization': 'Bearer $token',
+      if (token.isNotEmpty) 'Authorization': 'Bearer $token',
     };
   }
 
-  // 1. Ambil Data Profile / User (Untuk Poin & Statistik Beranda)
+  static dynamic _decode(String body) {
+    if (body.trim().isEmpty) return null;
+    try {
+      return jsonDecode(body);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static List<dynamic> _decodeList(String body) {
+    final data = _decode(body);
+    if (data is List) return data;
+    if (data is Map && data['data'] is List) return data['data'];
+    return [];
+  }
+
+  // --------------------------------------------------------------------------
+  // Masyarakat
+  // --------------------------------------------------------------------------
+
   static Future<Map<String, dynamic>> getProfile() async {
     try {
       final response = await http.get(
-        Uri.parse('${ApiConstants.baseUrl}/profile'),
+        Uri.parse('$baseUrl/profile'),
         headers: await _getHeaders(),
       );
-      return jsonDecode(response.body);
+      final data = _decode(response.body);
+      return data is Map<String, dynamic>
+          ? data
+          : {'success': false, 'message': 'Response profile tidak valid'};
     } catch (e) {
       return {'success': false, 'message': 'Gagal terhubung ke server: $e'};
     }
   }
 
-  // 2. Ambil Daftar Bank Sampah (Untuk Dropdown)
-static Future<List<dynamic>> getBankSampahList() async {
-  try {
-    final url = Uri.parse('${ApiConstants.baseUrl}/v2/bank-sampahs');
-    print('>>> GET REQUEST TO: $url');
-    
-    final response = await http.get(
-      url,
-      headers: await _getHeaders(),
-    );
+  static Future<List<dynamic>> getBankSampahList() async {
+    try {
+      final url = Uri.parse('$baseUrl/v2/bank-sampahs');
+      print('>>> GET REQUEST TO: $url');
 
-    print('>>> STATUS CODE: ${response.statusCode}');
-    print('>>> RESPONSE BODY: ${response.body}');
+      final response = await http.get(
+        url,
+        headers: await _getHeaders(),
+      );
 
-    if (response.statusCode == 200) {
-      final resData = jsonDecode(response.body);
+      print('>>> STATUS CODE: ${response.statusCode}');
+      print('>>> RESPONSE BODY: ${response.body}');
 
-      // Jika backend membungkus hasilnya dalam key 'data'
-      if (resData is Map && resData.containsKey('data')) {
-        return resData['data'] as List<dynamic>;
-      } 
-      // Jika backend langsung mengembalikan Array List []
-      else if (resData is List) {
-        return resData;
-      }
-    } else {
-      print('>>> GAGAL FETCH DATA! Status Code: ${response.statusCode}');
+      return response.statusCode == 200 ? _decodeList(response.body) : [];
+    } catch (e) {
+      print('>>> EXCEPTION / KONEKSI ERROR getBankSampahList: $e');
+      return [];
     }
-    return [];
-  } catch (e) {
-    print('>>> EXCEPTION / KONEKSI ERROR getBankSampahList: $e');
-    return [];
   }
-}
-  // 3. Simpan Tiket Setor Sampah
-  static Future<bool> createTiketSampah(double berat, dynamic bankSampahId) async {
-  try {
-    SharedPreferences prefs = await SharedPreferences.getInstance();
-    String? token = prefs.getString('token'); // Ambil token simpanan saat login
 
-    final response = await http.post(
-  Uri.parse('${ApiConstants.baseUrl}/v2/tiketsetorsampahs'),
-  headers: await _getHeaders(),
-  body: jsonEncode({
-    'bank_sampah_id': bankSampahId,
-    'berat': berat,
-  }),
-);
-
-    print(">>> RESPONSE CODE: ${response.statusCode}");
-    print(">>> RESPONSE BODY: ${response.body}");
-
-    return response.statusCode == 201 || response.statusCode == 200;
-  } catch (e) {
-    print(">>> ERROR CREATE TIKET: $e");
-    return false;
-  }
-}
-
-  // 4. Simpan Tiket Tukar Poin
-  static Future<bool> createTiketPoin(int jumlahPoin, int jumlahVoucher, dynamic bankSampahId) async {
+  static Future<bool> createTiketSampah(
+    double berat,
+    dynamic bankSampahId,
+  ) async {
     try {
       final response = await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/v2/tikettukarpoin'),
+        Uri.parse('$baseUrl/v2/tiketsetorsampahs'),
+        headers: await _getHeaders(),
+        body: jsonEncode({
+          'bank_sampah_id': bankSampahId,
+          'berat': berat,
+        }),
+      );
+
+      print('>>> RESPONSE CODE: ${response.statusCode}');
+      print('>>> RESPONSE BODY: ${response.body}');
+
+      return response.statusCode == 201 || response.statusCode == 200;
+    } catch (e) {
+      print('>>> ERROR CREATE TIKET: $e');
+      return false;
+    }
+  }
+
+  static Future<bool> createTiketPoin(
+    int jumlahPoin,
+    int jumlahVoucher,
+    dynamic bankSampahId,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/v2/tikettukarpoin'),
         headers: await _getHeaders(),
         body: jsonEncode({
           'jumlah_poin': jumlahPoin,
@@ -102,50 +114,184 @@ static Future<List<dynamic>> getBankSampahList() async {
         }),
       );
       return response.statusCode == 200 || response.statusCode == 201;
-    } catch (e) {
+    } catch (_) {
       return false;
     }
   }
 
-  // 5. Ambil Daftar Artikel (Edukasi)
   static Future<List<dynamic>> getArtikels() async {
     try {
       final response = await http.get(
-        Uri.parse('${ApiConstants.baseUrl}/v2/artikels'),
+        Uri.parse('$baseUrl/v2/artikels'),
         headers: await _getHeaders(),
       );
-      final data = jsonDecode(response.body);
-      return data['data'] ?? (data is List ? data : []);
-    } catch (e) {
+      return _decodeList(response.body);
+    } catch (_) {
       return [];
     }
   }
 
-  // 6. Ambil Riwayat Tiket Setor Sampah
   static Future<List<dynamic>> getRiwayatSetor() async {
     try {
       final response = await http.get(
-        Uri.parse('${ApiConstants.baseUrl}/v2/tiketsetorsampahs'),
+        Uri.parse('$baseUrl/v2/tiketsetorsampahs'),
         headers: await _getHeaders(),
       );
-      final data = jsonDecode(response.body);
-      return data['data'] ?? (data is List ? data : []);
-    } catch (e) {
+      return _decodeList(response.body);
+    } catch (_) {
       return [];
     }
   }
 
-  // 7. Ambil Riwayat Tiket Tukar Poin
   static Future<List<dynamic>> getRiwayatPoin() async {
     try {
       final response = await http.get(
-        Uri.parse('${ApiConstants.baseUrl}/v2/tikettukarpoin'),
+        Uri.parse('$baseUrl/v2/tikettukarpoin'),
         headers: await _getHeaders(),
       );
-      final data = jsonDecode(response.body);
-      return data['data'] ?? (data is List ? data : []);
-    } catch (e) {
+      return _decodeList(response.body);
+    } catch (_) {
       return [];
+    }
+  }
+
+  // --------------------------------------------------------------------------
+  // Admin Bank Sampah
+  // --------------------------------------------------------------------------
+
+  static Future<Map<String, dynamic>> getAdminDashboard() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/v2/admin/dashboard'),
+        headers: await _getHeaders(),
+      );
+
+      final data = _decode(response.body);
+      if (data is Map<String, dynamic>) return data;
+
+      return {
+        'success': false,
+        'message': 'Response dashboard admin tidak valid',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Gagal memuat dashboard admin: $e'};
+    }
+  }
+
+  static Future<List<dynamic>> getAdminTickets({String? status}) async {
+    try {
+      final uri = Uri.parse('$baseUrl/v2/admin/tiket-sampah').replace(
+        queryParameters: status == null || status.isEmpty
+            ? null
+            : {'status': status},
+      );
+
+      final response = await http.get(
+        uri,
+        headers: await _getHeaders(),
+      );
+
+      return response.statusCode == 200 ? _decodeList(response.body) : [];
+    } catch (e) {
+      print('>>> ERROR getAdminTickets: $e');
+      return [];
+    }
+  }
+
+  static Future<Map<String, dynamic>> approveAdminTicket(
+    int ticketId,
+    double beratActual,
+  ) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$baseUrl/v2/admin/tiket-sampah/$ticketId/approve'),
+        headers: await _getHeaders(),
+        body: jsonEncode({
+          'berat_actual': beratActual,
+        }),
+      );
+
+      final data = _decode(response.body);
+      if (data is Map<String, dynamic>) return data;
+
+      return {
+        'success': false,
+        'message': 'Response approval tidak valid',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Gagal memproses tiket: $e',
+      };
+    }
+  }
+
+  static Future<List<dynamic>> getAdminTiketPoin() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/v2/admin/tiket-poin'),
+        headers: await _getHeaders(),
+      );
+      return response.statusCode == 200 ? _decodeList(response.body) : [];
+    } catch (e) {
+      print('>>> ERROR getAdminTiketPoin: $e');
+      return [];
+    }
+  }
+
+  static Future<Map<String, dynamic>> getAdminVoucher() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/v2/admin/voucher'),
+        headers: await _getHeaders(),
+      );
+      final data = _decode(response.body);
+      if (data is Map<String, dynamic>) return data;
+      return {'success': false, 'data': []};
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Gagal memuat voucher: $e',
+        'data': [],
+      };
+    }
+  }
+
+  static Future<List<dynamic>> getAdminDeposit() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/v2/admin/deposit'),
+        headers: await _getHeaders(),
+      );
+      return response.statusCode == 200 ? _decodeList(response.body) : [];
+    } catch (e) {
+      print('>>> ERROR getAdminDeposit: $e');
+      return [];
+    }
+  }
+
+  static Future<Map<String, dynamic>> scanAdminQr(String kode) async {
+    try {
+      final uri = Uri.parse('$baseUrl/v2/admin/scan-qr').replace(
+        queryParameters: {'kode': kode},
+      );
+
+      final response = await http.get(
+        uri,
+        headers: await _getHeaders(),
+      );
+
+      final data = _decode(response.body);
+      if (data is Map<String, dynamic>) return data;
+      return {
+        'success': false,
+        'message': 'Response scan QR tidak valid',
+      };
+    } catch (e) {
+      return {
+        'success': false,
+        'message': 'Gagal memeriksa QR/tiket: $e',
+      };
     }
   }
 }

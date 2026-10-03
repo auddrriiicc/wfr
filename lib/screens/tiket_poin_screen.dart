@@ -65,7 +65,7 @@ class _TiketPoinScreenState extends State<TiketPoinScreen> {
     _isUpdating = true;
 
     int poin = int.tryParse(value) ?? 0;
-    int voucher = poin ~/ 100; // 1 voucher = 500 poin
+    int voucher = poin ~/ 100; // 1 voucher = 100 poin
 
     setState(() {
       _jumlahPoin = poin;

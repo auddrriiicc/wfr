@@ -1430,7 +1430,7 @@ class _RiwayatTabState
                       context,
                       MaterialPageRoute(
                         builder: (context) =>
-                            const TiketSampahScreen(),
+                            const TiketPoinScreen(),
                       ),
                     );
 
