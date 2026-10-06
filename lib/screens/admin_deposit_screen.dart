@@ -70,7 +70,7 @@ class _AdminDepositScreenState extends State<AdminDepositScreen> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.all(20),
                     itemCount: _rows.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    separatorBuilder: (_, _) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
                       final row = Map<String, dynamic>.from(_rows[index] as Map);
                       final weight = row['berat_actual'] ?? row['berat'] ?? 0;
