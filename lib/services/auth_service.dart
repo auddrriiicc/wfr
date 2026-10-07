@@ -7,12 +7,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../core/constants.dart';
 
 class AuthService {
-  Future<Map<String, String>> _headers({bool json = true}) async {
+  Future<Map<String, String>> _headers({bool includeContentType = true}) async {
     final prefs = await SharedPreferences.getInstance();
     final token = prefs.getString('token') ?? '';
 
     return {
-      if (json) 'Content-Type': 'application/json',
+      if (includeContentType) 'Content-Type': 'application/json',
       'Accept': 'application/json',
       if (token.isNotEmpty) 'Authorization': 'Bearer $token',
     };
@@ -20,6 +20,7 @@ class AuthService {
 
   dynamic _decode(String body) {
     if (body.trim().isEmpty) return null;
+
     try {
       return jsonDecode(body);
     } catch (_) {
@@ -27,8 +28,19 @@ class AuthService {
     }
   }
 
+  Future<void> _clearSession() async {
+    final prefs = await SharedPreferences.getInstance();
+
+    await prefs.remove('token');
+    await prefs.remove('role');
+    await prefs.remove('user_id');
+    await prefs.remove('bank_sampah_id');
+    await prefs.remove('bank_sampah_name');
+  }
+
   // --------------------------------------------------------------------------
-  // Register Masyarakat
+  // REGISTER MASYARAKAT
+  // Email TIDAK diperlukan.
   // --------------------------------------------------------------------------
   Future<Map<String, dynamic>> register({
     required String nik,
@@ -43,6 +55,7 @@ class AuthService {
     final request = http.MultipartRequest('POST', uri);
 
     request.headers['Accept'] = 'application/json';
+
     request.fields['nik'] = nik;
     request.fields['nama'] = nama;
     request.fields['username'] = username;
@@ -53,6 +66,7 @@ class AuthService {
     try {
       if (fotoKtp != null) {
         final bytes = await fotoKtp.readAsBytes();
+
         request.files.add(
           http.MultipartFile.fromBytes(
             'foto_ktp',
@@ -62,11 +76,12 @@ class AuthService {
         );
       }
 
-      final streamed = await request.send();
-      final response = await http.Response.fromStream(streamed);
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
       final data = _decode(response.body);
 
-      if (response.statusCode >= 200 && response.statusCode < 300 &&
+      if (response.statusCode >= 200 &&
+          response.statusCode < 300 &&
           data is Map<String, dynamic>) {
         return {
           'success': data['success'] == true,
@@ -81,22 +96,22 @@ class AuthService {
             : 'Gagal mendaftar. HTTP ${response.statusCode}',
       };
     } catch (e) {
-      return {'success': false, 'message': 'Koneksi error: $e'};
+      return {
+        'success': false,
+        'message': 'Koneksi error: $e',
+      };
     }
   }
 
   // --------------------------------------------------------------------------
-  // Login
+  // LOGIN
   // --------------------------------------------------------------------------
-  Future<Map<String, dynamic>> login(String username, String password) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    // Jangan biarkan token akun sebelumnya dipakai akun berikutnya.
-    await prefs.remove('token');
-    await prefs.remove('role');
-    await prefs.remove('user_id');
-    await prefs.remove('bank_sampah_id');
-    await prefs.remove('bank_sampah_name');
+  Future<Map<String, dynamic>> login(
+    String username,
+    String password,
+  ) async {
+    // Hapus session akun sebelumnya sebelum login akun baru.
+    await _clearSession();
 
     final url = Uri.parse('${ApiConstants.baseUrl}/login');
 
@@ -113,26 +128,26 @@ class AuthService {
         }),
       );
 
-      final decoded = _decode(response.body);
+      final data = _decode(response.body);
 
-      if (decoded is! Map<String, dynamic>) {
+      if (data is! Map<String, dynamic>) {
         return {
           'success': false,
           'message': 'Respon server tidak valid.',
         };
       }
 
-      if (response.statusCode != 200 || decoded['success'] != true) {
+      if (response.statusCode != 200 || data['success'] != true) {
         return {
           'success': false,
-          'message': decoded['message']?.toString() ?? 'Login gagal.',
+          'message': data['message']?.toString() ?? 'Login gagal.',
         };
       }
 
-      final token = decoded['token']?.toString() ?? '';
-      final role = decoded['role']?.toString() ?? 'Masyarakat';
-      final user = decoded['data'];
-      final bank = decoded['bank_sampah'];
+      final token = data['token']?.toString() ?? '';
+      final role = data['role']?.toString() ?? 'Masyarakat';
+      final user = data['data'];
+      final bankSampah = data['bank_sampah'];
 
       if (token.isEmpty) {
         return {
@@ -140,6 +155,8 @@ class AuthService {
           'message': 'Login berhasil tetapi token tidak diterima server.',
         };
       }
+
+      final prefs = await SharedPreferences.getInstance();
 
       await prefs.setString('token', token);
       await prefs.setString('role', role);
@@ -151,24 +168,25 @@ class AuthService {
         }
       }
 
-      if (bank is Map) {
-        if (bank['id'] != null) {
-          await prefs.setString('bank_sampah_id', bank['id'].toString());
+      if (bankSampah is Map) {
+        final bankId = bankSampah['id'];
+        final bankName = bankSampah['nama_bank_sampah'];
+
+        if (bankId != null) {
+          await prefs.setString('bank_sampah_id', bankId.toString());
         }
-        if (bank['nama_bank_sampah'] != null) {
-          await prefs.setString(
-            'bank_sampah_name',
-            bank['nama_bank_sampah'].toString(),
-          );
+
+        if (bankName != null) {
+          await prefs.setString('bank_sampah_name', bankName.toString());
         }
       }
 
       return {
         'success': true,
-        'message': decoded['message']?.toString() ?? 'Login berhasil',
+        'message': data['message']?.toString() ?? 'Login berhasil.',
         'role': role,
         'user': user,
-        'bank_sampah': bank,
+        'bank_sampah': bankSampah,
         'token': token,
       };
     } catch (e) {
@@ -180,76 +198,79 @@ class AuthService {
   }
 
   // --------------------------------------------------------------------------
-  // Ubah password akun yang sedang login
+  // UBAH PASSWORD
+  // Mendukung pemanggilan positional:
+  // changePassword(passwordLama, passwordBaru)
   // --------------------------------------------------------------------------
-  Future<Map<String, dynamic>> changePassword(
-    String currentPassword,
-    String newPassword,
-  ) async {
-    try {
-      final response = await http.patch(
-        Uri.parse('${ApiConstants.baseUrl}/change-password'),
-        headers: await _headers(),
-        body: jsonEncode({
-          'password': currentPassword,
-          'new_password': newPassword,
-        }),
-      );
+  Future<Map<String, dynamic>> changePassword({
+    required String currentPassword,
+    required String newPassword,
+  }) async {
+     try {
+    final response = await http.patch(
+      Uri.parse('${ApiConstants.baseUrl}/change-password'),
+      headers: await _headers(),
+      body: jsonEncode({
+        'password': currentPassword,
+        'new_password': newPassword,
+      }),
+    );
 
-      final data = _decode(response.body);
-      if (data is Map<String, dynamic>) {
-        return data;
-      }
+    final data = _decode(response.body);
 
-      return {
-        'success': false,
-        'message': 'Response ubah password tidak valid.',
-      };
-    } catch (e) {
-      return {
-        'success': false,
-        'message': 'Gagal mengubah password: $e',
-      };
+    if (data is Map<String, dynamic>) {
+      return data;
     }
+
+    return {
+      'success': false,
+      'message': 'Response ubah password tidak valid.',
+    };
+  } catch (e) {
+    return {
+      'success': false,
+      'message': 'Gagal mengubah password: $e',
+    };
   }
+}
 
   // --------------------------------------------------------------------------
-  // Logout
+  // LOGOUT
   // --------------------------------------------------------------------------
   Future<Map<String, dynamic>> logout() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString('token') ?? '';
+
     try {
-      final response = await http.post(
-        Uri.parse('${ApiConstants.baseUrl}/logout'),
-        headers: await _headers(),
-      );
+      if (token.isNotEmpty) {
+        final response = await http.post(
+          Uri.parse('${ApiConstants.baseUrl}/logout'),
+          headers: await _headers(),
+        );
 
-      final data = _decode(response.body);
-      final prefs = await SharedPreferences.getInstance();
+        final data = _decode(response.body);
 
-      await prefs.remove('token');
-      await prefs.remove('role');
-      await prefs.remove('user_id');
-      await prefs.remove('bank_sampah_id');
-      await prefs.remove('bank_sampah_name');
+        await _clearSession();
 
-      if (data is Map<String, dynamic>) return data;
+        if (data is Map<String, dynamic>) {
+          return data;
+        }
 
-      return {
-        'success': response.statusCode >= 200 && response.statusCode < 300,
-        'message': 'Logout berhasil.',
-      };
-    } catch (e) {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.remove('token');
-      await prefs.remove('role');
-      await prefs.remove('user_id');
-      await prefs.remove('bank_sampah_id');
-      await prefs.remove('bank_sampah_name');
-
-      return {
-        'success': false,
-        'message': 'Logout lokal selesai. Server tidak dapat dihubungi: $e',
-      };
+        return {
+          'success': response.statusCode >= 200 &&
+              response.statusCode < 300,
+          'message': 'Logout berhasil.',
+        };
+      }
+    } catch (_) {
+      // Session lokal tetap dihapus walaupun server tidak dapat dihubungi.
     }
+
+    await _clearSession();
+
+    return {
+      'success': true,
+      'message': 'Logout berhasil.',
+    };
   }
 }

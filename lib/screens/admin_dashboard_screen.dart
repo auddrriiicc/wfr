@@ -2,11 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../services/api_service.dart';
 import 'admin_deposit_screen.dart';
-import 'admin_account_screen.dart';
 import 'admin_scan_qr_screen.dart';
 import 'admin_tiket_poin_screen.dart';
 import 'admin_tiket_setor_screen.dart';
 import 'admin_voucher_screen.dart';
+import 'admin_account_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -137,25 +137,27 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         ],
                       ),
                     ),
-                    IconButton(
-                      onPressed: _loadDashboard,
-                      icon: const Icon(Icons.refresh),
-                      color: primaryGreen,
-                    ),
-                    IconButton(
-                      onPressed: () async {
-                        await Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const AdminAccountScreen(),
-                          ),
-                        );
-                        if (mounted) {
-                          _loadDashboard();
-                        }
-                      },
-                      icon: const Icon(Icons.account_circle_outlined),
-                      color: primaryGreen,
+                    Row(
+                      children: [
+                        IconButton(
+                          onPressed: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => const AdminAccountScreen(),
+                              ),
+                            );
+                          },
+                          icon: const Icon(Icons.person_outline),
+                          color: primaryGreen,
+                          tooltip: 'Akun',
+                        ),
+                        IconButton(
+                          onPressed: _loadDashboard,
+                          icon: const Icon(Icons.refresh),
+                          color: primaryGreen,
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -239,7 +241,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                       const SizedBox(height: 6),
                       Text(
                         'Buka modul untuk memeriksa dan mengelola data nyata dari masyarakat',
-                        style: TextStyle(color: Colors.white.withOpacity(.75), fontSize: 12),
+                        style: TextStyle(color: Colors.white.withValues(alpha: .75), fontSize: 12),
                       ),
                       const SizedBox(height: 18),
                       _menuTile(
